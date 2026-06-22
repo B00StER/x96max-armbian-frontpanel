@@ -1,0 +1,12 @@
+[Unit]
+Description=Ensure tm16xx DKMS module is built for the running kernel (self-heal after kernel swap)
+After=local-fs.target
+Before=display.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/tm16xx-dkms-ensure
+
+[Install]
+WantedBy=multi-user.target

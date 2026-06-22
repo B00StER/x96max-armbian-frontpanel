@@ -1,0 +1,28 @@
+#!/bin/bash
+# Ensure the tm16xx DKMS module is built+installed for the RUNNING kernel.
+#
+# ophub swaps kernels via `armbian-update` (not dpkg). That ships the new
+# kernel's headers but does NOT run DKMS, so a freshly-swapped kernel boots
+# without the module and the front panel goes dark. This runs at boot, rebuilds
+# the module if it's missing for the running kernel, then loads the SPI glue that
+# binds the front-panel controller. It always exits 0 so it can never block boot.
+set -u
+PKG=tm16xx; VER=1.0; KVER="$(uname -r)"; SRC="/usr/src/${PKG}-${VER}"
+log(){ echo "tm16xx-dkms-ensure: $*"; }
+
+if dkms status -m "$PKG" -v "$VER" -k "$KVER" 2>/dev/null | grep -q ': installed'; then
+    log "already installed for $KVER"; modprobe tm16xx_spi 2>/dev/null || true; exit 0
+fi
+if [ ! -e "/lib/modules/$KVER/build/Makefile" ] && [ ! -e "/usr/src/linux-headers-$KVER/Makefile" ]; then
+    log "ERROR: no kernel headers for $KVER; cannot build. Install headers then: dkms autoinstall -k $KVER"; exit 0
+fi
+# Re-register if the source is present but the module isn't in the DKMS tree.
+if [ -f "$SRC/dkms.conf" ] && ! dkms status -m "$PKG" -v "$VER" 2>/dev/null | grep -q "^$PKG"; then
+    log "registering $PKG/$VER with DKMS"; dkms add -m "$PKG" -v "$VER" 2>&1 | sed 's/^/  /'
+fi
+log "building tm16xx for $KVER via DKMS"
+dkms autoinstall -k "$KVER" 2>&1 | sed 's/^/  /'
+dkms status -m "$PKG" -v "$VER" -k "$KVER" 2>/dev/null | grep -q ': installed' \
+    && log "built+installed for $KVER" || log "ERROR: DKMS build/install failed for $KVER"
+modprobe tm16xx_spi 2>/dev/null || true
+exit 0
