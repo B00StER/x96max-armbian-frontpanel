@@ -190,6 +190,41 @@ basename "$(readlink /sys/bus/spi/devices/spi0.0/driver)"   # tm16xx-spi
 Optional: `sudo reboot`, then check the panel shows the clock again with no manual
 steps.
 
+## Adjust the status icons (optional)
+
+The daemon binds each status icon to a kernel LED *trigger* (an activity source).
+The icons live under `/sys/class/leds/display::*` and you can change what each one
+follows at runtime.
+
+One default is worth knowing about. The **card / SD icon** (`display::sd`) is wired
+to the `mmc0` host, but mmc host numbering is board specific. On the X96 Max `mmc0`
+is the SDIO WiFi controller, not a card slot (the SD slot is `mmc1`, the eMMC is
+`mmc2`). So out of the box the card icon flickers with WiFi traffic and looks like
+it blinks at random, even with no card inserted. Confirm which host is which with
+`ls -l /sys/class/mmc_host/*/` and `lsblk`.
+
+To repoint it at the eMMC, or turn it off:
+
+```bash
+# follow real eMMC activity instead of WiFi:
+echo mmc2 > /sys/class/leds/display::sd/trigger
+# or leave the icon dark:
+echo none > /sys/class/leds/display::sd/trigger
+```
+
+This isn't persistent on its own: the upstream `display-service` re-applies `mmc0`
+each time it starts. Two ways to make it stick:
+
+- Edit the `configure_trigger "SD Card" ... "mmc0"` line in
+  `/usr/sbin/display-service` to your chosen host.
+- Or use the configurable version from
+  [jefflessard/tm16xx-display#15](https://github.com/jefflessard/tm16xx-display/pull/15),
+  which reads `/etc/default/display-service`, so you can set `TRIGGER_SDCARD=mmc2`
+  (or empty to disable) without touching the script.
+
+On a wired-only box, disabling WiFi also quiets the icon and powers down the radio:
+`nmcli radio wifi off`.
+
 ## After a kernel update (`armbian-update`)
 
 Nothing to do. On the next boot, `tm16xx-dkms.service` sees the module isn't built
